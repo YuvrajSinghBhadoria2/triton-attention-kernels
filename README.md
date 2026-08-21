@@ -123,10 +123,6 @@ iterations (B=4, H=16, D=64, Q=1, fp16). SDPA is a reference baseline only.
 vendor reference, memory-efficient on a constrained GPU, and extending to paged KV
 that PyTorch's built-in attention leaves to the inference engine.
 
-## Resume bullet (edit to your measured numbers)
-
-> **Triton Attention Kernels for LLM Inference** — Implemented portable Triton kernels for fused prefill attention, split-KV Flash-Decoding, and paged KV-cache attention with block-table indirection; validated against PyTorch SDPA across 1K–16K contexts and multiple KV split configurations (num_splits ∈ {1, 32, 64, 128}). Reduced peak memory by 10.2× vs. naive PyTorch attention at 4K context, while the naive implementation OOMed at 8K on a 16GB T4. Characterized split-KV decode latency across 1K–16K KV-cache contexts and 1–128 KV splits on NVIDIA T4, identifying the context-dependent split configuration (16–32) that minimized kernel latency. The paged kernel reads KV through block tables — a capability PyTorch's standard `scaled_dot_product_attention` cannot express — from a single portable source with no CUDA C++.
-
 ## Project status
 
 MEASURED on Colab T4. All kernels pass `allclose` vs SDPA; prefill peak-memory win
