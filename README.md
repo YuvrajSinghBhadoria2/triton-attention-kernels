@@ -1,8 +1,8 @@
-# Portable Triton Paged-Attention + Flash-Decoding (T4 / Colab)
+# Portable Triton Attention Kernels — Prefill, Split-KV Decode, Paged (T4 / Colab)
 
-A from-scratch Triton implementation of LLM attention kernels for the **decode**
-regime of inference, built as a resume project for *LLM Inference Optimization
-Engineer* and *Triton Kernel Engineer* roles.
+A from-scratch, portable Triton implementation of the three attention kernels that
+power LLM inference — fused prefill, split-KV decode, and paged KV-cache attention —
+built to demonstrate production-style inference attention on constrained hardware.
 
 ## What's inside
 
@@ -21,7 +21,7 @@ are intentionally out of scope for this target.
 1. Open `triton_attention_colab.ipynb` in Colab (Upload, or `Open from GitHub` after
    you fork).
 2. Runtime → Change runtime type → **GPU** (T4).
-3. Runtime → Run all. It runs correctness, then prints the decode speedup table.
+3. Runtime → Run all. It runs correctness checks, then the prefill-memory and decode-latency benchmarks.
 
 ### Alternative: use the kernel modules directly
 
@@ -55,19 +55,17 @@ shapes (including non-power-of-two and GQA).
 - **Prefill (cell 7):** the honest, demonstrable win is **memory**. Fused Triton
   attention is `O(N·D)`; the naive materialized attention builds the full
   `[B,H,N,N]` score matrix and **OOMs on a 16GB T4 at large N while Triton keeps
-  running**. (Peak-memory is measured exactly and is unaffected by Colab's compute
-  throttling, so these numbers are trustworthy.) Do **not** claim a raw-speed win
-  over the naive baseline or over SDPA here — on a free T4, PyTorch's SDPA dispatches
-  to expert-tuned FlashAttention-2 / cuDNN and a from-scratch Triton kernel will not
-  beat it. That is expected, not a failure.
+   running**. (Peak-memory is measured exactly and is unaffected by Colab's compute
+   throttling, so these numbers are trustworthy. On a free T4, PyTorch's SDPA
+   dispatches to expert-tuned FlashAttention-2 / cuDNN, so don't expect a raw-speed
+   win — that is expected, not a failure.)
 - **Decode (cell 8):** performance characterization of split-KV `flash_decoding`
   across `num_splits` ∈ {1,8,16,32,64,128} and N_CTX 1024→16384, reporting kernel
   latency vs an SDPA baseline. Correctness is covered by cell 5's `allclose=True`
   checks. The split-KV value is the *architecture* (parallelizing the KV dimension
   across SMs, the technique vLLM uses for long-context decode), not a raw-speed win
   over SDPA — see the measured table under "Decode latency characterization".
-- **Do not claim a speedup over SDPA or naive** unless your own run shows one.
-  Report only measured numbers.
+
 
 > Numbers vary with T4 contention in free Colab. Peak-memory (cell 7) is exact;
 > latency (cell 8) is only comparable across rows run in the same session. Run 2–3
@@ -123,9 +121,8 @@ iterations (B=4, H=16, D=64, Q=1, fp16). SDPA is a reference baseline only.
 vendor reference, memory-efficient on a constrained GPU, and extending to paged KV
 that PyTorch's built-in attention leaves to the inference engine.
 
-## Project status
+## Status
 
-MEASURED on Colab T4. All kernels pass `allclose` vs SDPA; prefill peak-memory win
-demonstrated (naive OOMs at N=8192, 10.2× more memory at N=4096); decode
-split-KV latency characterized across 1K–16K contexts and 1–128 splits (best
-split 16–32, `num_splits=128` consistently regressed). Writeup complete.
+Validated and benchmarked on an NVIDIA T4 (Colab free tier, sm75), fp16. All kernels
+pass `allclose` against PyTorch SDPA; prefill peak-memory and decode split-KV latency
+are characterized in the sections above.
