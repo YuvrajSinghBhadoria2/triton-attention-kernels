@@ -73,3 +73,22 @@ Every kernel vs `torch.nn.functional.scaled_dot_product_attention`, `allclose(at
 ### Status
 
 Validated on T4 sm75, fp16. All kernels pass SDPA allclose 1K→16K; memory and split-KV scaling characterized above.
+
+### Long-Context Decode: 32K–64K (NEW, measured on Kaggle T4)
+
+Reproduce: `long_context_decode_benchmark.ipynb` (Kaggle T4, torch 2.11.0+cu130, triton 3.6.0).
+Config: `B=1, H=8, D=64`, fp16, 10 warmup + 50 CUDA-event iters, correctness = `allclose` vs SDPA (atol/rtol 0.02).
+
+| Context | Best splits | Triton (ms) | SDPA (ms) | Speedup vs SDPA | Correct |
+|---:|---:|---:|---:|---:|:---:|
+| 1K  | 1  | 0.232 | 0.166 | 0.72× (slower — launch-bound) | ✅ |
+| 2K  | 4  | 0.224 | 0.324 | 1.45× | ✅ |
+| 4K  | 16 | 0.245 | 0.643 | 2.62× | ✅ |
+| 8K  | 64 | 0.229 | 1.019 | 4.45× | ✅ |
+| 16K | 64 | 0.294 | 1.086 | 3.69× | ✅ |
+| 32K | 64 | 0.547 | 2.162 | **3.95×** | ✅ |
+| 64K | 64 | 1.076 | 4.340 | **4.03×** | ✅ |
+
+**Key insight:** at short context, split-KV is launch-bound and loses to SDPA. From 4K onward, parallelizing KV across SMs wins big — at 64K the split kernel is **4× faster** than PyTorch's vendor-tuned SDPA. More splits is monotonically better at long context (64 splits best at 8K–64K); the earlier "128 splits worst" finding only holds for short context.
+
+Full log: [Kaggle run](https://www.kaggle.com/code/yuvrajsinghbhadoria/long-context-decode-benchmark) · Writeup: `docs/long-context-decode.md`
